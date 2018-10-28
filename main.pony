@@ -5,6 +5,7 @@ use "random"
 use "time"
 
 // TODO: non-square grid
+// TODO: ANSI term size as default
 // TODO: actor per cell, for fun
 
 actor Main
