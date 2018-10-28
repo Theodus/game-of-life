@@ -12,7 +12,7 @@ use "time"
 
 actor Main
   let _env: Env
-  var _cols: USize = 20
+  var _cols: USize = 40
 
   var _grid: p.Vec[(Cell, Bool)] = p.Vec[(Cell, Bool)]
   var _update_count: USize = 0
@@ -20,18 +20,13 @@ actor Main
   let _hist_max: USize = 5
   embed _hist: Array[p.Vec[(Cell, Bool)]]
 
-  var _freq_hz: U64 = 15
+  var _freq_hz: U64 = 10
   let _timers: Timers = Timers
 
   new create(env: Env) =>
     _env = env
     _hist = Array[p.Vec[(Cell, Bool)]](_hist_max)
     reset(Time.millis())
-
-  fun print_grid() =>
-    _env.out.print(Life.show_grid(
-      Iter[(Cell, Bool)](_grid.values()).map[Bool]({(cc) => cc._2 }),
-      _cols))
 
   fun ref reset(seed: U64) =>
     _hist.clear()
@@ -77,7 +72,7 @@ actor Main
 
     if _update_count == _grid.size() then
       _update_count = 0
-      print_grid()
+      _env.out.print(show_grid(_grid, _cols))
 
       if done() then
         reset(Time.millis())
@@ -89,13 +84,19 @@ actor Main
     end
 
   fun done(): Bool =>
-    for grid in _hist.values() do
-      let second = {(c_l: (Cell, Bool)): Bool => c_l._2 }
-      let current = Iter[(Cell, Bool)](_grid.values()).map[Bool](second)
-      let prev = Iter[(Cell, Bool)](grid.values()).map[Bool](second)
-      if Life.grid_eq(current, prev) then return true end
-    end
-    false
+    let self: Main = this
+    let cells =
+      {(g: p.Vec[(Cell, Bool)]): Iter[Bool] =>
+        Iter[(Cell, Bool)](g.values()).map[Bool]({(c_l) => c_l._2 })
+      }
+    let grid_eq =
+      {(prev: p.Vec[(Cell, Bool)]): Bool =>
+        self.grid_cells(_grid)
+          .zip[Bool](self.grid_cells(prev))
+          .all({(cc) => cc._1 == cc._2 })
+      }
+
+    Iter[p.Vec[(Cell, Bool)]](_hist.values()).any(grid_eq)
 
   fun ref start_timer() =>
     let notify =
@@ -110,50 +111,21 @@ actor Main
   be tick() =>
     try _grid(0)?._1.start() end
 
-actor Cell
-  let _idx: USize
-  var _live: Bool
-  embed _neighbors: Array[Cell]
-  embed _responses: MapIs[Cell, Bool]
-  var _listening: Bool = false
+  fun tag show_grid(grid: p.Vec[(Cell, Bool)], cols: USize): String iso^ =>
+    let show_cell =
+      {(live: Bool): String => if live then "▀" else " " end }
+    let insert_nl =
+      {(i: USize): String => if (i % cols) == (cols - 1) then "\n" else "" end }
+    let append_nl =
+      {(i_s: (USize, String)): String =>
+        " ".join([i_s._2; insert_nl(i_s._1)].values())
+      }
 
-  let _notify: Main
+    "".join(grid_cells(grid)
+      .map[String](show_cell)
+      .enum()
+      .map[String](append_nl))
 
-  new create(live: Bool, idx: USize, notify: Main) =>
-    _idx = idx
-    _live = live
-    _neighbors = Array[Cell](8)
-    _responses = MapIs[Cell, Bool](8)
-    _notify = notify
-
-  be add_neighbor(cell: Cell) =>
-    _neighbors.push(cell)
-    _notify.update(this, _idx, _live)
-
-  be reset(live: Bool) =>
-    _live = live
-
-  be start() =>
-    send_interactions()
-
-  fun ref send_interactions() =>
-    for neighbor in _neighbors.values() do
-      neighbor.interact(this, _live)
-    end
-    _listening = true
-
-  be interact(cell: Cell, live: Bool) =>
-    _responses(cell) = live
-    if not _listening then
-      send_interactions()
-    end
-    if _responses.size() == _neighbors.size() then
-      let n = Iter[Bool](_responses.values())
-        .filter({(b) => b })
-        .count()
-      _live = Life.cell_transition(_live, n)
-      _notify.update(this, _idx, _live)
-
-      _responses.clear()
-      _listening = false
-    end
+  fun tag grid_cells(grid: p.Vec[(Cell, Bool)]): Iter[Bool]^ =>
+    Iter[(Cell, Bool)](grid.values())
+      .map[Bool]({(c_l) => c_l._2 })
