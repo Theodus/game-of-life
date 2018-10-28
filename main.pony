@@ -5,9 +5,8 @@ use "random"
 use "time"
 
 // TODO: cl arguments
-// TODO: non-square grid
 // TODO: ANSI term size as default
-// TODO: actor per cell, for fun
+// TODO: non-square grid
 // TODO: wrap around on edges
 
 actor Main
@@ -33,7 +32,7 @@ actor Main
     _grid = p.Vec[(Cell, Bool)]
     let rand = Rand(seed)
     for i in Range(0, _cols * _cols) do
-      let live = rand.int[U8](3) == 1
+      let live = rand.int[U8](4) == 1
       let cell = Cell(live, i, this)
       _grid = _grid.push((cell, live))
     end
