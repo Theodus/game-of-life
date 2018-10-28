@@ -29,6 +29,9 @@ actor Main
       try _freq_hz = _env.args(2)?.read_int[U64]()?._1 end
     end
 
+    _grid = _grid.concat(
+      Iter[USize](Range(0, _cols * _cols)).map[Bool]({(n) => false }))
+
     let notify =
       object iso is TimerNotify
         let self: Main = this
@@ -47,8 +50,9 @@ actor Main
   fun ref reset(seed: U64) =>
     _hist.clear()
     let rand = Rand(seed)
-    _grid = _grid.concat(Iter[USize](Range(0, _cols * _cols))
-      .map_stateful[Bool]({(n) => rand.int[U8](4) == 1 }))
+    for i in Range(0, _cols * _cols) do
+      try _grid = _grid.update(i, rand.int[U8](3) == 1)? end
+    end
 
   be tick() =>
     let grid' = try Life.grid_transition(_grid, _cols)? else _grid end
