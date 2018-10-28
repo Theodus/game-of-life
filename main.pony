@@ -4,17 +4,29 @@ use "itertools"
 use "random"
 use "time"
 
+// TODO: non-square grid
+// TODO: actor per cell, for fun
+
 actor Main
   let _env: Env
-  var _dim: USize = 45
-  var _cells: p.Vec[Bool] = p.Vec[Bool]
-  var _prev: p.Vec[Bool] = p.Vec[Bool]
+  var _cols: USize = 20
+  var _grid: p.Vec[Bool] = p.Vec[Bool]
 
+  let _hist_max: USize = 3
+  var _hist: Array[p.Vec[Bool]] = []
+
+  var _freq_hz: U64 = 10
   let _timers: Timers = Timers
   let _timer: Timer tag
 
   new create(env: Env) =>
-    _env = env
+    _env = consume env
+    if _env.args.size() > 1 then
+      try _cols = _env.args(1)?.read_int[USize]()?._1 end
+    end
+    if _env.args.size() > 2 then
+      try _freq_hz = _env.args(2)?.read_int[U64]()?._1 end
+    end
 
     let notify =
       object iso is TimerNotify
@@ -23,79 +35,41 @@ actor Main
           self.tick()
           true
       end
-    let timer = Timer(consume notify, 100_000_000, 100_000_000)
+    let t = 1_000_000_000 / _freq_hz
+    let timer = Timer(consume notify, t, t)
     _timer = timer
     _timers(consume timer)
 
-    reseed(Time.millis())
-    print_cells()
+    reset(Time.millis())
+    print_grid()
+
+  fun ref reset(seed: U64) =>
+    _hist.clear()
+    let rand = Rand(seed)
+    _grid = _grid.concat(Iter[USize](Range(0, _cols * _cols))
+      .map_stateful[Bool]({(n) => rand.int[U8](4) == 1 }))
 
   be tick() =>
-    let cells' = try life()? else _cells end
-    if done(_cells, cells') or done(_prev, cells') then
+    let grid' = try Life.grid_transition(_grid, _cols)? else _grid end
+
+    if _hist.size() == _hist_max then try _hist.shift()? end end
+    _hist.push(_grid)
+    _grid = grid'
+
+    if done() then
       // _timers.cancel(_timer)
-      reseed(Time.millis())
-    else
-      _prev = _cells = cells'
-    end
-    print_cells()
-
-  fun ref reseed(seed: U64) =>
-    let rand = Rand(seed)
-    _cells = _cells.concat(Iter[USize](Range(0, _dim * _dim))
-      .map_stateful[Bool]({(n) => rand.int[U8](2) == 1 }))
-
-    _prev = _cells
-
-  fun done(cells: p.Vec[Bool], cells': p.Vec[Bool]): Bool =>
-    Iter[Bool](cells.values())
-      .zip[Bool](cells'.values())
-      .all({(cc) => cc._1 == cc._2 })
-
-  fun life(): p.Vec[Bool] ? =>
-    var cells' = _cells
-    let idxs = Array[USize].init(0, 9)
-    for (idx, l) in _cells.pairs() do
-      for i in Range(0, 9) do idxs(i)? = idx end
-      for i in Range(0, 3) do idxs(i)? = (idxs(i)? - _dim) end
-      for i in Range(6, 9) do idxs(i)? = (idxs(i)? + _dim) end
-      for i in Range(0, 9, 3) do idxs(i)? = (idxs(i)? - 1) end
-      for i in Range(2, 9, 3) do idxs(i)? = (idxs(i)? + 1) end
-
-      let unset =
-        {ref(r: Range) ? => for i in r do idxs(i)? = -1 end }
-
-      if idx < _dim then unset(Range(0, 3))? end
-      if idx >= (_cells.size() - _dim) then unset(Range(6, 9))? end
-      if (idx % _dim) == 0 then unset(Range(0, 9, 3))? end
-      if (idx % _dim) == (_dim - 1) then unset(Range(2, 9, 3))? end
-
-      let live_neighbors =
-        Iter[USize](idxs.values())
-          .filter({(i) => (i < _cells.size()) and (i != idx) })
-          .map[USize]({(i) ? => if _cells(i)? then 1 else 0 end })
-          .fold[USize](0, {(a, b) => a + b })
-
-      cells' = cells'.update(idx, cell_life(_cells(idx)?, live_neighbors))?
-    end
-    cells'
-
-  fun tag cell_life(live: Bool, neighbors_alive: USize): Bool =>
-    match (live, neighbors_alive)
-    | (true, 2) | (true, 3) | (false, 3) => true
-    else false
+      reset(Time.millis())
     end
 
-  fun print_cells() =>
-    _env.err.print(show_cells(Iter[Bool](_cells.values())))
-    _env.err.print("".join(
-      Iter[USize](Range(0, _dim)).map[String]({(n) => "--"})))
+    print_grid()
 
-  fun show_cells(cells: Iter[Bool]): String iso^ =>
-    let ss = recover String end
-    for (i, cell) in cells.enum() do
-      ss.append(if cell then "▀ " else "  " end)
-      if (i % _dim) == (_dim - 1) then ss.append("\n") end
+  fun done(): Bool =>
+    let current = Iter[Bool](_grid.values())
+    for grid in _hist.values() do
+      let g = Iter[Bool](grid.values())
+      if Life.grid_eq(current, g) then return true end
     end
-    try ss.pop()? end
-    ss
+    false
+
+  fun print_grid() =>
+    _env.out.print(Life.show_grid(Iter[Bool](_grid.values()), _cols))
