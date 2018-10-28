@@ -13,7 +13,7 @@ actor Main
   var _cols: USize = 20
   var _grid: p.Vec[Bool] = p.Vec[Bool]
 
-  let _hist_max: USize = 3
+  let _hist_max: USize = 10
   var _hist: Array[p.Vec[Bool]] = []
 
   var _freq_hz: U64 = 10
@@ -53,8 +53,8 @@ actor Main
   be tick() =>
     let grid' = try Life.grid_transition(_grid, _cols)? else _grid end
 
-    if _hist.size() == _hist_max then try _hist.shift()? end end
-    _hist.push(_grid)
+    if _hist.size() == _hist_max then try _hist.pop()? end end
+    _hist.unshift(_grid)
     _grid = grid'
 
     if done() then
@@ -65,8 +65,8 @@ actor Main
     print_grid()
 
   fun done(): Bool =>
-    let current = Iter[Bool](_grid.values())
     for grid in _hist.values() do
+      let current = Iter[Bool](_grid.values())
       let g = Iter[Bool](grid.values())
       if Life.grid_eq(current, g) then return true end
     end
