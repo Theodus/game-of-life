@@ -6,7 +6,6 @@ use "time"
 
 // TODO: parse cl arguments
 // TODO: ANSI term size as default
-// TODO: wrap around on edges
 
 actor Main
   let _env: Env
@@ -28,7 +27,7 @@ actor Main
     if env.args.size() > 2 then
       try
         _cols = env.args(1)?.read_int[USize]()?._1
-        _rows = env.args(1)?.read_int[USize]()?._1
+        _rows = env.args(2)?.read_int[USize]()?._1
       end
     end
     if env.args.size() > 3 then
@@ -47,33 +46,26 @@ actor Main
       let cell = Cell(live, i, this)
       _grid = _grid.push((cell, live))
     end
-    try add_neighbors()? end
+    add_neighbors()
 
-  fun ref add_neighbors() ? =>
-    let idxs = Array[USize].init(0, 9)
+  fun ref add_neighbors() =>
     for (idx, (cell, live)) in _grid.pairs() do
-      for i in Range(0, 9) do idxs(i)? = idx end
-      for i in Range(0, 3) do idxs(i)? = (idxs(i)? - _cols) end
-      for i in Range(6, 9) do idxs(i)? = (idxs(i)? + _cols) end
-      for i in Range(0, 9, 3) do idxs(i)? = (idxs(i)? - 1) end
-      for i in Range(2, 9, 3) do idxs(i)? = (idxs(i)? + 1) end
+      let x = (idx % _cols, idx / _rows)
+      let idxs =
+        [ north(west((x))); north(x); north(east(x))
+          west(x); east(x)
+          south(west(x)); south(x); south(east(x))
+        ]
 
-      let unset =
-        {ref(r: Range) ? => for i in r do idxs(i)? = -1 end }
-      if idx < _cols then unset(Range(0, 3))? end
-      if idx >= (_grid.size() - _cols) then unset(Range(6, 9))? end
-      if (idx % _cols) == 0 then unset(Range(0, 9, 3))? end
-      if (idx % _cols) == (_cols - 1) then unset(Range(2, 9, 3))? end
-      idxs(4)? = -1
-
-      let n = Iter[USize](idxs.values())
-        .filter({(i) => i != -1 })
-        .map[Cell]({(i) ? => _grid(i)?._1 })
-        .map[None]({(c) => cell.add_neighbor(c) })
-        .count()
+      let count =
+        Iter[(USize, USize)](idxs.values())
+          .map[USize]({(c_r) => c_r._1 + (c_r._2 * _cols) })
+          .map[Cell]({(i) ? => _grid(i)?._1 })
+          .map[None]({(c) => cell.add_neighbor(c) })
+          .count()
 
       // TODO: don't rely on underflow
-      _update_count = _update_count - (n - 1)
+      _update_count = _update_count - (count - 1)
     end
 
   be update(cell: Cell, idx: USize, live: Bool) =>
@@ -139,3 +131,21 @@ actor Main
   fun tag grid_cells(grid: p.Vec[(Cell, Bool)]): Iter[Bool]^ =>
     Iter[(Cell, Bool)](grid.values())
       .map[Bool]({(c_l) => c_l._2 })
+
+  fun west(l: (USize, USize)): (USize, USize) =>
+    (mod_dec(l._1, _cols), l._2)
+
+  fun east(l: (USize, USize)): (USize, USize) =>
+    (mod_inc(l._1, _cols), l._2)
+
+  fun north(l: (USize, USize)): (USize, USize) =>
+    (l._1, mod_dec(l._2, _rows))
+
+  fun south(l: (USize, USize)): (USize, USize) =>
+    (l._1, mod_inc(l._2, _rows))
+
+  fun mod_inc(n: USize, m: USize): USize =>
+    if n == (m - 1) then 0 else n + 1 end
+
+  fun mod_dec(n: USize, m: USize): USize =>
+    if n == 0 then (m - 1) else n - 1 end
