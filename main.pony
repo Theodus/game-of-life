@@ -4,19 +4,19 @@ use "itertools"
 use "random"
 use "time"
 
-// TODO: cl arguments
+// TODO: parse cl arguments
 // TODO: ANSI term size as default
-// TODO: non-square grid
 // TODO: wrap around on edges
 
 actor Main
   let _env: Env
-  var _cols: USize = 40
+  var _cols: USize = 10
+  var _rows: USize = 10
 
   var _grid: p.Vec[(Cell, Bool)] = p.Vec[(Cell, Bool)]
   var _update_count: USize = 0
 
-  let _hist_max: USize = 5
+  let _hist_max: USize = 10
   embed _hist: Array[p.Vec[(Cell, Bool)]]
 
   var _freq_hz: U64 = 10
@@ -24,6 +24,17 @@ actor Main
 
   new create(env: Env) =>
     _env = env
+
+    if env.args.size() > 2 then
+      try
+        _cols = env.args(1)?.read_int[USize]()?._1
+        _rows = env.args(1)?.read_int[USize]()?._1
+      end
+    end
+    if env.args.size() > 3 then
+      try _freq_hz = env.args(3)?.read_int[U64]()?._1 end
+    end
+
     _hist = Array[p.Vec[(Cell, Bool)]](_hist_max)
     reset(Time.millis())
 
@@ -31,7 +42,7 @@ actor Main
     _hist.clear()
     _grid = p.Vec[(Cell, Bool)]
     let rand = Rand(seed)
-    for i in Range(0, _cols * _cols) do
+    for i in Range(0, _rows * _cols) do
       let live = rand.int[U8](4) == 1
       let cell = Cell(live, i, this)
       _grid = _grid.push((cell, live))
