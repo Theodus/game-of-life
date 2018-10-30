@@ -50,7 +50,7 @@ actor Main
 
   fun ref add_neighbors() =>
     for (idx, (cell, live)) in _grid.pairs() do
-      let x = (idx % _cols, idx / _rows)
+      let x = (idx % _cols, idx / _cols)
       let idxs =
         [ north(west((x))); north(x); north(east(x))
           west(x); east(x)
@@ -64,7 +64,6 @@ actor Main
           .map[None]({(c) => cell.add_neighbor(c) })
           .count()
 
-      // TODO: don't rely on underflow
       _update_count = _update_count - (count - 1)
     end
 
